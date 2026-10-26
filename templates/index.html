@@ -1,0 +1,440 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medicine Identifier AI</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f3f6fb;
+            color: #1f2937;
+        }
+
+        header {
+            background: #155e75;
+            color: white;
+            padding: 22px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin-top: 12px;
+        }
+
+        main {
+            max-width: 920px;
+            margin: 30px auto;
+            padding: 24px;
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 4px 20px #00000010;
+        }
+
+        .notice {
+            background: #fff7ed;
+            border-left: 4px solid #ea580c;
+            padding: 14px;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        label {
+            display: block;
+            margin: 20px 0 8px;
+            font-weight: bold;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: white;
+        }
+
+        button {
+            margin-top: 16px;
+            padding: 12px 20px;
+            border: 0;
+            border-radius: 8px;
+            background: #0e7490;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #155e75;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        #preview {
+            display: none;
+            max-width: 100%;
+            max-height: 300px;
+            margin-top: 16px;
+            border-radius: 8px;
+            object-fit: contain;
+        }
+
+        #result {
+            margin-top: 24px;
+            line-height: 1.7;
+            overflow-wrap: anywhere;
+        }
+
+        .answer {
+            background: #f0fdfa;
+            border: 1px solid #99f6e4;
+            padding: 22px;
+            border-radius: 10px;
+        }
+
+        .answer h3 {
+            color: #155e75;
+            font-size: 18px;
+            margin: 22px 0 8px;
+            line-height: 1.4;
+        }
+
+        .answer h3:first-child {
+            margin-top: 0;
+        }
+
+        .answer p {
+            margin: 8px 0 14px;
+        }
+
+        .answer ul {
+            padding-left: 24px;
+            margin: 8px 0 18px;
+        }
+
+        .answer li {
+            padding-left: 4px;
+            margin-bottom: 5px;
+        }
+
+        .answer strong {
+            color: #164e63;
+        }
+
+        .status {
+            padding: 14px;
+            border-radius: 8px;
+            background: #f1f5f9;
+        }
+
+        .error {
+            color: #b91c1c;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            padding: 14px;
+            border-radius: 8px;
+        }
+
+        @media (max-width: 600px) {
+            main {
+                margin: 14px;
+                padding: 16px;
+            }
+
+            header {
+                padding: 18px 12px;
+            }
+
+            header h1 {
+                font-size: 25px;
+            }
+
+            .answer {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>💊 Medicine Identifier AI</h1>
+        <p>Upload a medicine photo to examine its visible details</p>
+    </header>
+
+    <main>
+        <div class="notice">
+            <strong>Safety notice:</strong>
+            AI image analysis can be wrong. Never take an unidentified
+            tablet based on this tool's result. Confirm medicine identity
+            with a pharmacist or other qualified healthcare professional.
+        </div>
+
+        <form id="medicineForm">
+            <label for="medicineImage">Select a medicine photo</label>
+
+            <input
+                type="file"
+                id="medicineImage"
+                name="image"
+                accept="image/png,image/jpeg,image/webp"
+                required
+            >
+
+            <img
+                id="preview"
+                alt="Selected medicine photo preview"
+            >
+
+            <button type="submit" id="analyzeButton">
+                Analyze Photo
+            </button>
+        </form>
+
+        <section id="result" aria-live="polite"></section>
+    </main>
+
+    <script>
+        const form = document.getElementById("medicineForm");
+        const fileInput = document.getElementById("medicineImage");
+        const preview = document.getElementById("preview");
+        const result = document.getElementById("result");
+        const button = document.getElementById("analyzeButton");
+
+        // Release the previous preview URL when selecting another image.
+        let previewUrl = null;
+
+        fileInput.addEventListener("change", () => {
+            const file = fileInput.files[0];
+
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+                previewUrl = null;
+            }
+
+            preview.style.display = "none";
+            preview.removeAttribute("src");
+            result.replaceChildren();
+
+            if (!file) return;
+
+            const allowedTypes = [
+                "image/jpeg",
+                "image/png",
+                "image/webp"
+            ];
+
+            if (!allowedTypes.includes(file.type)) {
+                fileInput.value = "";
+                showMessage(
+                    "Please select a JPG, PNG, or WebP image.",
+                    true
+                );
+                return;
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                fileInput.value = "";
+                showMessage(
+                    "Please select an image smaller than 5 MB.",
+                    true
+                );
+                return;
+            }
+
+            previewUrl = URL.createObjectURL(file);
+            preview.src = previewUrl;
+            preview.style.display = "block";
+        });
+
+        function showMessage(message, isError = false) {
+            const box = document.createElement("div");
+            box.className = isError ? "error" : "status";
+            box.textContent = message;
+            result.replaceChildren(box);
+        }
+
+        // Convert basic Markdown into safe DOM elements.
+        // Never insert AI output directly with innerHTML.
+        function formatAnswer(text) {
+            const container = document.createElement("div");
+            container.className = "answer";
+
+            const lines = text
+                .replace(/\r\n?/g, "\n")
+                .replace(/```(?:markdown|md|text)?/gi, "")
+                .split("\n");
+
+            let paragraphLines = [];
+            let list = null;
+
+            function formatInline(text, parent) {
+                // Only bold markers are formatted.
+                // All text is inserted using textContent.
+                const parts = text.split(/(\*\*[^*]+\*\*)/g);
+
+                parts.forEach(part => {
+                    const match = part.match(/^\*\*(.+)\*\*$/);
+
+                    if (match) {
+                        const strong = document.createElement("strong");
+                        strong.textContent = match[1];
+                        parent.appendChild(strong);
+                    } else {
+                        parent.appendChild(
+                            document.createTextNode(
+                                part.replace(/\*([^*]+)\*/g, "$1")
+                                    .replace(/`([^`]+)`/g, "$1")
+                            )
+                        );
+                    }
+                });
+            }
+
+            function flushParagraph() {
+                if (!paragraphLines.length) return;
+
+                const p = document.createElement("p");
+                formatInline(paragraphLines.join(" "), p);
+                container.appendChild(p);
+                paragraphLines = [];
+            }
+
+            function closeList() {
+                list = null;
+            }
+
+            lines.forEach(rawLine => {
+                const line = rawLine.trim();
+
+                // Ignore empty lines and Markdown separators.
+                if (!line || /^[-*_]{3,}$/.test(line)) {
+                    flushParagraph();
+                    closeList();
+                    return;
+                }
+
+                // Headings: # Heading, ## Heading, etc.
+                const headingMatch = line.match(/^#{1,6}\s+(.+)$/);
+
+                if (headingMatch) {
+                    flushParagraph();
+                    closeList();
+
+                    const heading = document.createElement("h3");
+                    formatInline(headingMatch[1], heading);
+                    container.appendChild(heading);
+                    return;
+                }
+
+                // Recognize the named sections in your safety prompt,
+                // even when the model omits Markdown heading markers.
+                const sectionMatch = line.match(
+                    /^(Image type|Visible observations|Possible identification|Ingredient and strength|General uses|Uncertainty and verification|Safety notice)\s*:\s*(.*)$/i
+                );
+
+                if (sectionMatch) {
+                    flushParagraph();
+                    closeList();
+
+                    const heading = document.createElement("h3");
+                    heading.textContent = sectionMatch[1] + ":";
+                    container.appendChild(heading);
+
+                    if (sectionMatch[2].trim()) {
+                        const p = document.createElement("p");
+                        formatInline(sectionMatch[2].trim(), p);
+                        container.appendChild(p);
+                    }
+                    return;
+                }
+
+                // Bullets: -, *, +, or numbered lists.
+                const bulletMatch = line.match(
+                    /^(?:[-*+]|\d+[.)])\s+(.+)$/
+                );
+
+                if (bulletMatch) {
+                    flushParagraph();
+
+                    if (!list) {
+                        list = document.createElement("ul");
+                        container.appendChild(list);
+                    }
+
+                    const li = document.createElement("li");
+                    formatInline(bulletMatch[1], li);
+                    list.appendChild(li);
+                    return;
+                }
+
+                closeList();
+                paragraphLines.push(line);
+            });
+
+            flushParagraph();
+
+            return container;
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            if (!fileInput.files.length) {
+                showMessage("Please select a medicine image.", true);
+                return;
+            }
+
+            const data = new FormData();
+            data.append("image", fileInput.files[0]);
+
+            button.disabled = true;
+            button.textContent = "Analyzing...";
+            showMessage("Analyzing the image. Please wait...");
+
+            try {
+                const response = await fetch("/analyze", {
+                    method: "POST",
+                    body: data
+                });
+
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(
+                        payload.error || "Analysis failed."
+                    );
+                }
+
+                if (!payload.result) {
+                    throw new Error(
+                        "No analysis was returned. Please try again."
+                    );
+                }
+
+                result.replaceChildren(formatAnswer(payload.result));
+
+            } catch (error) {
+                showMessage(
+                    error.message ||
+                    "Unable to analyze the image. Please try again.",
+                    true
+                );
+            } finally {
+                button.disabled = false;
+                button.textContent = "Analyze Photo";
+            }
+        });
+    </script>
+</body>
+</html>
